@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-binance
+sqlalchemy
+psycopg2-binary
+pydantic-settings
+pandas
+ta
+python-dotenv
+xgboost
+scikit-learn
+joblib
