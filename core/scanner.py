@@ -10,34 +10,33 @@ class MarketScanner:
     def __init__(self):
         self.exchange = BinanceFuturesClient()
         self.cmc = CMCClient()
-        self._cached_whitelist = None # RAM Cache para no gastar la API gratuita de CMC
+        self._cached_whitelist = None # RAM Cache para la API de CMC
 
     def get_symbols_to_trade(self):
-        """
-        Punto de entrada principal para obtener los símbolos a analizar.
-        Alterna entre escaneo dinámico y lista blanca fija.
-        """
+        """Punto de entrada principal para decidir qué activos analizar."""
         tickers = self.exchange.get_24h_tickers()
-        if not tickers:
-            logger.error("No se pudieron obtener tickers de Binance.")
-            return []
+        if not tickers: 
+            return[]
 
         if settings.USE_SCANNER:
-            logger.info(f"🔍 [MODO SCANNER] Buscando las {settings.SCAN_TOP_N} con mayor volatilidad.")
+            logger.info(f"🔍 [MODO SCANNER] Buscando el Top {settings.SCAN_TOP_N} por volatilidad extrema...")
             return self._scan_by_volatility(tickers)
         else:
-            logger.info(f"📋 [MODO WHITELIST] Filtrando activos configurados: {settings.WHITELIST}")
+            # LOG DINÁMICO: Nos dice qué sistema está usando realmente
+            if settings.USE_DYNAMIC_CMC_WHITELIST:
+                logger.info("🌐 [MODO CMC DYNAMIC] Analizando el Top Global de CoinMarketCap...")
+            else:
+                logger.info(f"📋[MODO WHITELIST ESTÁTICA] Filtrando activos: {settings.WHITELIST}")
+            
             return self._filter_by_whitelist(tickers)
 
     def _scan_by_volatility(self, tickers):
-        """Filtra y ordena por volumen y cambio porcentual absoluto."""
-        valid_pairs = []
+        """Busca monedas con explosión de volumen y movimiento de precio."""
+        valid_pairs =[]
         for t in tickers:
             symbol = t['symbol']
-            # Filtro base: Solo USDT-M y evitar contratos con fecha (contienen _)
             if symbol.endswith('USDT') and '_' not in symbol:
                 volume = float(t['quoteVolume'])
-                # Filtro de liquidez mínima según settings
                 if volume >= settings.MIN_VOLUME_24H:
                     valid_pairs.append({
                         'symbol': symbol,
@@ -51,15 +50,18 @@ class MarketScanner:
         return sorted_pairs[:settings.SCAN_TOP_N]
 
     def _filter_by_whitelist(self, tickers):
-        # Lógica Dinámica Inteligente
+        """Filtra los tickers de Binance usando CMC o la lista estática local."""
+        
+        # 1. Decidir de dónde sacar la lista objetivo
         if settings.USE_DYNAMIC_CMC_WHITELIST:
             if not self._cached_whitelist:
-                # Se ejecuta 1 sola vez al iniciar el bot
+                # Se conecta a CoinMarketCap 1 sola vez al iniciar el bot
                 self._cached_whitelist = self.cmc.get_dynamic_whitelist(top_n=settings.SCAN_TOP_N)
             target_list = self._cached_whitelist
         else:
             target_list = settings.WHITELIST_LIST
 
+        # 2. Cruzar la lista con los datos en vivo de Binance
         selected_pairs =[]
         for t in tickers:
             symbol = t['symbol']
@@ -70,4 +72,5 @@ class MarketScanner:
                     'last_price': float(t['lastPrice']),
                     'volume': float(t['quoteVolume'])
                 })
+                
         return selected_pairs
