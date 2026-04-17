@@ -1,5 +1,6 @@
 # core/scanner.py
 from exchange.binance_client import BinanceFuturesClient
+from core.cmc_client import CMCClient
 from config.settings import settings
 import logging
 
@@ -8,6 +9,8 @@ logger = logging.getLogger(__name__)
 class MarketScanner:
     def __init__(self):
         self.exchange = BinanceFuturesClient()
+        self.cmc = CMCClient()
+        self._cached_whitelist = None # RAM Cache para no gastar la API gratuita de CMC
 
     def get_symbols_to_trade(self):
         """
@@ -48,18 +51,23 @@ class MarketScanner:
         return sorted_pairs[:settings.SCAN_TOP_N]
 
     def _filter_by_whitelist(self, tickers):
-        """Devuelve solo los datos de los símbolos presentes en la Whitelist."""
-        whitelist = settings.WHITELIST_LIST
-        selected_pairs = []
-        
+        # Lógica Dinámica Inteligente
+        if settings.USE_DYNAMIC_CMC_WHITELIST:
+            if not self._cached_whitelist:
+                # Se ejecuta 1 sola vez al iniciar el bot
+                self._cached_whitelist = self.cmc.get_dynamic_whitelist(top_n=settings.SCAN_TOP_N)
+            target_list = self._cached_whitelist
+        else:
+            target_list = settings.WHITELIST_LIST
+
+        selected_pairs =[]
         for t in tickers:
             symbol = t['symbol']
-            if symbol in whitelist:
+            if symbol in target_list:
                 selected_pairs.append({
                     'symbol': symbol,
                     'abs_change': abs(float(t['priceChangePercent'])),
                     'last_price': float(t['lastPrice']),
                     'volume': float(t['quoteVolume'])
                 })
-        
         return selected_pairs

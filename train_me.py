@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import logging
+from core.cmc_client import CMCClient
 from core.ai_trainer import AITrainer
 from strategy.ai_model import CryptoAIModel
 from core.scanner import MarketScanner
@@ -17,15 +18,19 @@ def run_adaptive_training():
     Si USE_SCANNER es True, entrena con las monedas más volátiles del momento.
     Si es False, usa la WHITELIST fija.
     """
-    scanner = MarketScanner()
-    
-    # 1. Obtener símbolos dinámicamente según el modo configurado
-    # Reutilizamos la lógica exacta que usa el bot para operar
-    selected_symbols_data = scanner.get_symbols_to_trade()
-    symbols = [s['symbol'] for s in selected_symbols_data]
+    if settings.USE_DYNAMIC_CMC_WHITELIST:
+        logger.info("🌐 Consultando CoinMarketCap para entrenamiento dinámico...")
+        cmc = CMCClient()
+        symbols = cmc.get_dynamic_whitelist(top_n=settings.SCAN_TOP_N)
+    elif settings.USE_SCANNER:
+        scanner = MarketScanner()
+        selected_symbols_data = scanner.get_symbols_to_trade()
+        symbols = [s['symbol'] for s in selected_symbols_data]
+    else:
+        symbols = settings.WHITELIST_LIST
 
     if not symbols:
-        logger.error("❌ No se encontraron símbolos para entrenar. Revisa los filtros de volumen.")
+        logger.error("❌ No se encontraron símbolos para entrenar.")
         return
 
     all_data = []
