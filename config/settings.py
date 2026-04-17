@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     MODEL_PATH: str = "models/xgboost_model.pkl"
     TRAINING_LIMIT_KLINES: int = 50000
 
+    # --- MLOps: Auto Retraining ---
+    AUTO_RETRAIN_ENABLED: bool = True
+    AUTO_RETRAIN_DAY: int = 6  # 0=Lunes, 6=Domingo
+    AUTO_RETRAIN_HOUR: int = 2 # 2 AM
+
     @property
     def WHITELIST_LIST(self) -> List[str]:
         if not self.WHITELIST: return []

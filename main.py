@@ -1,6 +1,7 @@
 # main.py
 import threading
 import time
+import datetime
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
@@ -14,6 +15,8 @@ from core.orchestrator import BotOrchestrator
 from execution.trade_monitor import TradeMonitor
 from core.logger import setup_logger
 from exchange.binance_client import BinanceFuturesClient
+# Importamos la lógica de entrenamiento
+from train_me import run_adaptive_training
 
 # 1. Logger Profesional y Base de Datos
 logger = setup_logger()
@@ -87,15 +90,46 @@ def run_trading_cycles():
             logger.error(f"Falla en Ciclo Trader: {e}")
         time.sleep(settings.CYCLE_INTERVAL_SECONDS)
 
+def run_auto_trainer():
+    """Hilo de MLOps: Reentrena el modelo automáticamente en el día/hora configurado."""
+    if not settings.AUTO_RETRAIN_ENABLED:
+        return
+
+    dias =["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    dia_str = dias[settings.AUTO_RETRAIN_DAY] if 0 <= settings.AUTO_RETRAIN_DAY <= 6 else "Desconocido"
+    logger.info(f"🤖 Auto-Trainer MLOps Activo. Sincronizado para: {dia_str} a las {settings.AUTO_RETRAIN_HOUR}:00")
+    
+    last_train_date = None
+
+    while True:
+        try:
+            now = datetime.datetime.now()
+            # Validamos si es el día y la hora correctos
+            if now.weekday() == settings.AUTO_RETRAIN_DAY and now.hour == settings.AUTO_RETRAIN_HOUR:
+                # Verificamos que no se haya entrenado ya hoy
+                if last_train_date != now.date():
+                    logger.warning("⚙️ [MLOps] Iniciando Reentrenamiento Automático de la IA...")
+                    run_adaptive_training()
+                    last_train_date = now.date()
+                    logger.info("✅ [MLOps] Reentrenamiento Finalizado. La IA ha sido actualizada.")
+        except Exception as e:
+            logger.error(f"❌ Error en Auto-Trainer: {e}")
+        
+        # Duerme 1 hora antes de volver a mirar el reloj (3600 segundos)
+        time.sleep(3600)
+
 # 3. Lifespan de FastAPI
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     t_monitor = threading.Thread(target=run_trade_monitor, name="Monitor", daemon=True)
     t_radar = threading.Thread(target=run_radar_updates, name="Radar", daemon=True)
     t_trading = threading.Thread(target=run_trading_cycles, name="Trader", daemon=True)
+    t_trainer = threading.Thread(target=run_auto_trainer, name="AutoTrainer", daemon=True)
     
     t_monitor.start()
     t_radar.start()
+    t_trainer.start()
+    
     if settings.AUTO_TRADING:
         t_trading.start()
     

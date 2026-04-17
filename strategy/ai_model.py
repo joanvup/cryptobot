@@ -15,6 +15,7 @@ class CryptoAIModel:
         self.model = None
         # Características que la IA analizará (Features)
         self.features = ['rsi', 'ema_20', 'ema_50', 'rel_volume', 'atr']
+        self.last_mod_time = 0 # Rastrea la última actualización del modelo
 
     def train(self, csv_path: str):
         """Entrena el modelo XGBoost con los datos consolidados."""
@@ -53,16 +54,21 @@ class CryptoAIModel:
         return f"Entrenamiento Exitoso. Precisión: {accuracy:.2f}"
 
     def predict_probability(self, current_features_df: pd.DataFrame) -> float:
-        """Realiza la inferencia de probabilidad (0.0 a 1.0)."""
         try:
-            if self.model is None:
-                if os.path.exists(self.model_path):
+            # --- HOT-RELOADING LOGIC ---
+            if os.path.exists(self.model_path):
+                current_mod_time = os.path.getmtime(self.model_path)
+                # Si el archivo es más nuevo que el que tenemos en memoria, lo recargamos
+                if self.model is None or current_mod_time > self.last_mod_time:
+                    logger.info("🔄 Recargando nuevo Cerebro IA en memoria (Hot-Reload)...")
                     self.model = joblib.load(self.model_path)
-                else:
-                    return 0.5 # Neutralidad si no hay cerebro entrenado
+                    self.last_mod_time = current_mod_time
+            else:
+                return 0.5 
 
+            if self.model is None: return 0.5
+            
             X = current_features_df[self.features]
-            # Obtenemos la probabilidad de la clase 1 (Ganador)
             probs = self.model.predict_proba(X)
             return float(probs[0][1])
         except Exception as e:
