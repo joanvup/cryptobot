@@ -15,18 +15,24 @@ from execution.trade_monitor import TradeMonitor
 from core.logger import setup_logger
 from exchange.binance_client import BinanceFuturesClient
 
+# 1. Logger Profesional y Base de Datos
 logger = setup_logger()
 Base.metadata.create_all(bind=engine)
 
+# 2. INSTANCIA COMPARTIDA (Keep-Alive)
 shared_client = BinanceFuturesClient()
-last_radar_scan =[]
+last_radar_scan = []
+
+# --- PROCESOS EN SEGUNDO PLANO ---
 
 def run_trade_monitor():
+    """Vigila posiciones y gestiona Trailing Stop."""
     monitor = TradeMonitor()
-    monitor.exchange = shared_client
+    monitor.exchange = shared_client # Inyectamos cliente compartido
     monitor.run_forever()
 
 def run_radar_updates():
+    """Actualiza el Radar IA con telemetría cada X segundos e inyecta el Funding Rate."""
     global last_radar_scan
     orchestrator = BotOrchestrator()
     orchestrator.client = shared_client
@@ -40,15 +46,20 @@ def run_radar_updates():
 
             for s in symbols_to_scan:
                 symbol = s['symbol']
+                
+                # --- NUEVA INYECCIÓN DE FUNDING ---
                 funding = shared_client.get_funding_rate(symbol)
+                
+                # Pedir klines usando la sesión compartida
                 df = shared_client.get_historical_klines(symbol, interval=settings.DEFAULT_TIMEFRAME)
+                
+                # Analizar pasando el Funding Rate real para telemetría y filtrado
                 analysis = orchestrator.strategy.analyze(df, funding_rate=funding)
                 
                 current_radar.append({
                     "symbol": symbol,
                     "price": s['last_price'],
                     "signal": analysis['signal'],
-                    "tech_signal": analysis.get('tech_signal', 'NEUTRAL'), # <--- AÑADIDO PARA EL RADAR
                     "confidence": analysis.get('ai_confidence', 0.5) * 100,
                     "indicators": analysis.get('indicators', {}),
                     "change": s.get('abs_change', 0)
@@ -58,17 +69,24 @@ def run_radar_updates():
         except Exception as e:
             logger.error(f"Error en Radar Thread: {e}")
             time.sleep(10)
+        
         time.sleep(settings.RADAR_INTERVAL_SECONDS)
 
 def run_trading_cycles():
+    """Ciclo de ejecución de órdenes reales inyectando lógica de Funding."""
     orchestrator = BotOrchestrator()
     orchestrator.client = shared_client
     logger.info(f"🚀 Trader Core iniciado (Ciclos: {settings.CYCLE_INTERVAL_SECONDS}s)")
+    
     while settings.AUTO_TRADING:
-        try: orchestrator.run_single_cycle()
-        except Exception as e: logger.error(f"Falla en Ciclo Trader: {e}")
+        try:
+            # El orquestador ahora internamente consultará el funding rate para filtrar trades
+            orchestrator.run_single_cycle()
+        except Exception as e:
+            logger.error(f"Falla en Ciclo Trader: {e}")
         time.sleep(settings.CYCLE_INTERVAL_SECONDS)
 
+# 3. Lifespan de FastAPI
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     t_monitor = threading.Thread(target=run_trade_monitor, name="Monitor", daemon=True)
@@ -77,19 +95,26 @@ async def lifespan(app: FastAPI):
     
     t_monitor.start()
     t_radar.start()
-    if settings.AUTO_TRADING: t_trading.start()
+    if settings.AUTO_TRADING:
+        t_trading.start()
+    
     yield
     logger.info("Kernel Quantum Shuting Down...")
 
-app = FastAPI(title="AI Quant Terminal v4.4", lifespan=lifespan)
+app = FastAPI(title="AI Quant Terminal v3.0", lifespan=lifespan)
+
+# --- RUTAS DE API ---
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
-    with open("frontend/index.html", "r", encoding="utf-8") as f: return f.read()
+    with open("frontend/index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
 @app.get("/balance")
 def get_balance():
-    try: return shared_client.get_usdt_balance()
+    try:
+        balance_data = shared_client.get_usdt_balance()
+        return balance_data
     except Exception as e:
         logger.error(f"Balance API Error: {e}")
         return {"total_balance": 0, "unrealized_pnl": 0}
@@ -109,7 +134,7 @@ def get_radar():
 @app.get("/api/bot-settings")
 def get_bot_settings():
     return {
-        "run_mode": settings.RUN_MODE,
+        "run_mode": settings.RUN_MODE, # NUEVO
         "max_trades": settings.MAX_OPEN_TRADES,
         "be_r": settings.TS_PHASE1_ACTIVATION_ATR,
         "ts1_r": settings.TS_PHASE2_ACTIVATION_ATR,
@@ -120,4 +145,4 @@ def get_bot_settings():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False, access_log=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8008, reload=False, access_log=False)

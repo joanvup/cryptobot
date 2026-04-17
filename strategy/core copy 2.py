@@ -18,11 +18,13 @@ class HybridStrategy:
 
     def analyze(self, df: pd.DataFrame, funding_rate: float = 0.0) -> dict:
         df = add_indicators(df)
+        # Necesitamos al menos 2 velas (la cerrada y la que está en formación)
         if df.empty or len(df) < settings.EMA_SLOW + 2:
-            return {"signal": "NEUTRAL", "tech_signal": "NEUTRAL", "reason": "Data insuficiente", "indicators": {}}
+            return {"signal": "NEUTRAL", "reason": "Data insuficiente", "indicators": {}}
 
-        closed_row = df.iloc[-2]  
-        live_row = df.iloc[-1]    
+        # --- CORRECCIÓN CRÍTICA: EL SHIFT DE VELA ---
+        closed_row = df.iloc[-2]  # Usamos la última vela CERRADA (100% volumen real)
+        live_row = df.iloc[-1]    # Usamos la vela EN FORMACIÓN (Precio de ejecución real)
         
         ema_20 = float(closed_row['ema_20'])
         ema_50 = float(closed_row['ema_50'])
@@ -34,18 +36,21 @@ class HybridStrategy:
             "rel_vol": rel_vol,
             "trend": "UP" if ema_20 > ema_50 else "DOWN",
             "ema_diff": ((ema_20 / ema_50) - 1) * 100,
-            "close": float(live_row['close']), 
+            "close": float(live_row['close']), # El dashboard mostrará el precio vivo
             "funding": funding_rate
         }
 
+        # --- IA ACTIVA (Despierta con la vela cerrada) ---
         ai_probability = 0.5
+        # Le damos un 20% de tolerancia al volumen para despertar a la IA y ver qué opina
         if rel_vol >= (self.vol_threshold * 0.8): 
             try:
+                # Enviamos el DataFrame hasta la vela cerrada para la predicción
                 ai_probability = float(self.ai_model.predict_probability(df.iloc[-2:-1]))
             except Exception as e:
                 logger.warning(f"Falla IA: {e}")
 
-        # --- LÓGICA TÉCNICA BASE ---
+        # --- LÓGICA DE SEÑALES (Basada en hechos consumados, no en formación) ---
         signal = "NEUTRAL"
         tech_reason = ""
 
@@ -59,7 +64,7 @@ class HybridStrategy:
             signal = "SHORT"
             tech_reason = "Estructura Bajista"
 
-        # --- FILTRO DE COSTOS ---
+        # Filtro de Costos
         if signal == "LONG" and funding_rate > self.max_funding:
             signal = "NEUTRAL"
             tech_reason = f"High Funding ({funding_rate*100:.3f}%)"
@@ -67,10 +72,7 @@ class HybridStrategy:
             signal = "NEUTRAL"
             tech_reason = f"High Funding ({funding_rate*100:.3f}%)"
 
-        # --- GUARDAMOS LA SEÑAL TÉCNICA PARA EL DASHBOARD ANTES DEL VETO ---
-        tech_signal = signal 
-
-        # --- FILTRO FINAL (VETO DE IA PARA EJECUCIÓN) ---
+        # Filtro final de IA
         final_signal = signal
         final_reason = tech_reason if tech_reason else "Sin señal"
         
@@ -79,11 +81,10 @@ class HybridStrategy:
             final_reason = f"AI Veto ({ai_probability:.2f})"
 
         return {
-            "signal": final_signal,           # Señal Real (Dicta si el bot opera)
-            "tech_signal": tech_signal,       # Señal Técnica (Dicta si el Radar muestra el %)
+            "signal": final_signal,
             "reason": final_reason if final_signal == "NEUTRAL" else f"{tech_reason} | IA: {ai_probability:.2f}",
             "indicators": indicators_data,
             "ai_confidence": ai_probability,
-            "close_price": indicators_data['close'],     
-            "atr": float(closed_row['atr'])              
+            "close_price": indicators_data['close'],     # Precio de ejecución en vivo
+            "atr": float(closed_row['atr'])              # ATR cerrado para SL estable
         }
