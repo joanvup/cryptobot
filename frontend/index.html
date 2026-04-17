@@ -410,12 +410,12 @@
                                             <div className="bg-black/30 p-3 rounded-lg border border-gray-800/30 mt-3 space-y-2">
                                                 <div className="flex justify-between items-end">
                                                     <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">IA Confidence</span>
-                                                    <span className={`text-xl font-bold mono leading-none ${item.signal !== 'NEUTRAL' ? 'text-blue-400' : 'text-gray-500'}`}>
-                                                        {item.signal === 'NEUTRAL' ? '--' : item.confidence.toFixed(1) + '%'}
+                                                    <span className={`text-xl font-bold mono leading-none ${item.tech_signal !== 'NEUTRAL' ? 'text-blue-400' : 'text-gray-500'}`}>
+                                                        {item.tech_signal === 'NEUTRAL' ? '--' : item.confidence.toFixed(1) + '%'}
                                                     </span>
                                                 </div>
                                                 <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-                                                    <div className={`h-full transition-all duration-700 ${item.signal === 'LONG' ? 'bg-green-500 shadow-[0_0_10px_#10b981]' : item.signal === 'SHORT' ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-gray-600'}`} style={{ width: `${item.confidence}%` }}></div>
+                                                    <div className={`h-full transition-all duration-700 ${item.tech_signal === 'LONG' ? 'bg-green-500 shadow-[0_0_10px_#10b981]' : item.tech_signal === 'SHORT' ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-gray-600'}`} style={{ width: `${item.confidence}%` }}></div>
                                                 </div>
                                             </div>
                                         </div>

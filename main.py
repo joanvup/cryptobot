@@ -60,6 +60,7 @@ def run_radar_updates():
                     "symbol": symbol,
                     "price": s['last_price'],
                     "signal": analysis['signal'],
+                    "tech_signal": analysis.get('tech_signal', 'NEUTRAL'),
                     "confidence": analysis.get('ai_confidence', 0.5) * 100,
                     "indicators": analysis.get('indicators', {}),
                     "change": s.get('abs_change', 0)

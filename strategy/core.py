@@ -82,6 +82,7 @@ class HybridStrategy:
 
         return {
             "signal": final_signal,
+            "tech_signal": signal,
             "reason": final_reason if final_signal == "NEUTRAL" else f"{tech_reason} | IA: {ai_probability:.2f}",
             "indicators": indicators_data,
             "ai_confidence": ai_probability,
