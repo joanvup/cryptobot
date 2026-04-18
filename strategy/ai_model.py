@@ -14,7 +14,8 @@ class CryptoAIModel:
         self.model_path = model_path or settings.MODEL_PATH
         self.model = None
         # Características que la IA analizará (Features)
-        self.features = ['rsi', 'ema_20', 'ema_50', 'rel_volume', 'atr']
+        self.features = ['rsi', 'rel_volume', 'ema_diff_pct', 'atr_pct']
+
         self.last_mod_time = 0 # Rastrea la última actualización del modelo
 
     def train(self, csv_path: str):
@@ -28,6 +29,14 @@ class CryptoAIModel:
 
         X = df[self.features]
         y = df['target']
+
+        # --- BALANCEO MATEMÁTICO DE CLASES ---
+        # Multiplica la importancia de los trades ganadores para que las probabilidades sean justas
+        pos_count = y.sum()
+        neg_count = len(y) - pos_count
+        scale_weight = neg_count / pos_count if pos_count > 0 else 1.0
+        
+        logger.info(f"⚖️ Balanceando IA. Negativos: {neg_count} | Positivos: {pos_count} | Multiplicador: {scale_weight:.2f}")
 
         # Split 80/20
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)

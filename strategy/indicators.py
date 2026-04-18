@@ -21,5 +21,11 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['vol_sma_20'] = df['volume'].rolling(window=20).mean()
     df['rel_volume'] = df['volume'] / df['vol_sma_20']
 
+    # 1. Diferencia porcentual entre EMAs (Agnóstico al precio)
+    df['ema_diff_pct'] = ((df['ema_20'] - df['ema_50']) / df['ema_50']) * 100
+
+    # 2. Volatilidad porcentual (ATR como % del precio actual)
+    df['atr_pct'] = (df['atr'] / df['close']) * 100
+
     # Limpiamos los valores NaN (nulos) que se generan en los primeros cálculos
     return df.dropna()
